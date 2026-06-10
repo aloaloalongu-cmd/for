@@ -1,42 +1,44 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
-local ACTIVATION_DISTANCE = 16 -- Khoảng cách tự động kích hoạt
+local ACTIVATION_DISTANCE = 15
 
-print("--- [Forsaken Ultimate Bypass] Khởi chạy bộ quét Remote ---")
+-- Các biến lưu trữ dữ liệu bảo mật đã "học" được từ bạn
+local SavedRemote = nil
+local SavedArgs = nil
+local HasLearned = false
 
--- Hàm tìm kiếm và kích hoạt hành động đỡ đòn qua hệ thống mạng của game
-local function ForceParry()
-    -- Cách 1: Quét và kích hoạt trực tiếp các Sự kiện (RemoteEvents) trong ReplicatedStorage
-    -- Game Forsaken bắt buộc phải gửi tín hiệu lên Server khi bạn bấm Q để người khác thấy bạn đang đỡ/lướt
-    for _, child in ipairs(ReplicatedStorage:GetDescendants()) do
-        if child:IsA("RemoteEvent") then
-            local name = child.Name:lower()
-            -- Quét các từ khóa liên quan đến cơ chế phòng thủ/kỹ năng trong game
-            if name:find("block") or name:find("parry") or name:find("dash") or name:find("ability") or name:find("skill") then
-                child:FireServer(true)
-                task.wait(0.1)
-                child:FireServer(false)
-                return
-            end
+print("--- [Hệ thống Auto-Learn Forsaken đã bật] ---")
+print("BẮT BUỘC: Hãy nhấn phím Q thủ công 1 lần trong trận để script học mã khóa!")
+
+-- 1. Bộ lọc lắng nghe để tự động học mã khóa khi bạn nhấn Q
+local mt = getrawmetatable(game)
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    
+    -- Nếu bạn bấm nút và game gửi tín hiệu Đỡ/Kỹ năng lên server
+    if method == "FireServer" and self:IsA("RemoteEvent") and not HasLearned then
+        local name = self.Name:lower()
+        if name:find("block") or name:find("parry") or name:find("dash") or name:find("ability") or name:find("combat") then
+            SavedRemote = self
+            SavedArgs = args
+            HasLearned = true
+            warn("🎉 Đã học được mã khóa bảo mật thành công! Hệ thống Auto Block sẵn sàng.")
         end
     end
+    return oldNamecall(self, ...)
+end)
+setreadonly(mt, true)
 
-    -- Cách 2: Nếu game giấu Remote trong nhân vật, quét trực tiếp trong Tool/Character của bạn
-    local myChar = LocalPlayer.Character
-    if myChar then
-        for _, child in ipairs(myChar:GetDescendants()) do
-            if child:IsA("RemoteEvent") then
-                child:FireServer()
-            end
-        end
-    end
-end
-
--- Vòng lặp quét dựa trên vị trí tuyệt đối (Bỏ qua việc check Attributes của Killer phòng trường hợp game giấu thuộc tính)
+-- 2. Vòng lặp tự động đỡ đòn sử dụng mã khóa đã học
 RunService.RenderStepped:Connect(function()
+    if not HasLearned or not SavedRemote then return end
+    
     local myChar = LocalPlayer.Character
     if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
     local myHRP = myChar.HumanoidRootPart
@@ -45,16 +47,17 @@ RunService.RenderStepped:Connect(function()
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local killerChar = player.Character
             local killerHRP = killerChar.HumanoidRootPart
-            local killerHumanoid = killerChar:FindFirstChildOfClass("Humanoid")
             
             local distance = (myHRP.Position - killerHRP.Position).Magnitude
             
-            -- Vì không thể dò chính xác tên thuộc tính "Attacking" bị nhà phát triển ẩn đi,
-            -- script này sẽ tự động kích hoạt Đỡ đòn ngay khi Killer bước vào phạm vi nguy hiểm và đang di chuyển lao vào bạn.
             if distance <= ACTIVATION_DISTANCE then
-                if killerHumanoid and killerHumanoid.MoveDirection.Magnitude > 0 then
-                    ForceParry()
-                    task.wait(0.4) -- Khóa thời gian chờ tránh spam gây lỗi game
+                -- Kiểm tra trạng thái tấn công của Killer
+                if killerChar:GetAttribute("Attacking") == true or killerChar:GetAttribute("Swinging") == true then
+                    
+                    -- "Nhái" lại chính xác cuộc gọi kèm theo string và table đã lưu
+                    SavedRemote:FireServer(unpack(SavedArgs))
+                    
+                    task.wait(0.6) -- Cooldown
                     break
                 end
             end
