@@ -1,64 +1,56 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local VirtualInputManager = game:GetService("VirtualInputManager") -- Dùng để giả lập nhấn phím
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
-local BLOCK_KEY = Enum.KeyCode.Q -- Thay đổi phím F nếu game dùng phím khác để đỡ
-local MAX_DISTANCE = 15 -- Khoảng cách an toàn để kích hoạt block (tính bằng Studs)
+local BLOCK_KEY = Enum.KeyCode.F -- Phím đỡ đòn mặc định
+local ACTIVATION_DISTANCE = 14 -- Khoảng cách an toàn để kích hoạt block (đơn vị Studs)
 
--- Hàm giả lập nhấn phím đỡ đòn
-local function TriggerBlock()
-    VirtualInputManager:SendKeyEvent(true, BLOCK_KEY, false, game) -- Nhấn xuống
-    task.wait(0.1) -- Giữ phím một chút
-    VirtualInputManager:SendKeyEvent(false, BLOCK_KEY, false, game) -- Thả ra
+-- In thông báo để bạn biết script đã chạy thành công
+print("--- [Forsaken Auto Block] Đã kích hoạt thành công! ---")
+
+-- Hàm giả lập nhấn phím F cực nhanh (Frame-perfect)
+local function PerformBlock()
+    VirtualInputManager:SendKeyEvent(true, BLOCK_KEY, false, game)
+    task.wait(0.05) -- Thời gian giữ phím siêu ngắn để tối ưu parry
+    VirtualInputManager:SendKeyEvent(false, BLOCK_KEY, false, game)
 end
 
--- Hàm tìm Killer trong trận đấu
-local function GetKiller()
-    -- Trong game Forsaken, bạn cần tìm người chơi đang đóng vai Killer.
-    -- Đoạn này kiểm tra dựa trên khoảng cách, bạn có thể tối ưu thêm nếu biết thuộc tính phân biệt Killer của game.
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- Mẹo: Thường Killer sẽ có một công cụ (Tool) vũ khí hoặc một trạng thái đặc biệt
-            local character = player.Character
-            local hasWeapon = character:FindFirstChildOfClass("Tool") or character:FindFirstChild("Weapon")
-            
-            if hasWeapon then
-                return player
-            end
+-- Vòng lặp quét liên tục mỗi khung hình (RenderStepped) để đảm bảo không bỏ sót đòn chém nào
+RunService.RenderStepped:Connect(function()
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+    local myHRP = myChar.HumanoidRootPart
+
+    -- Cách 1: Quét nhanh các Part (Hitbox) xuất hiện đột ngột xung quanh nhân vật
+    -- Các game đối kháng thường tạo ra một khối vùng đánh (Hitbox Region) khi chém
+    local partsAround = workspace:GetPartBoundsInBox(myHRP.CFrame, Vector3.new(15, 15, 15))
+    for _, part in ipairs(partsAround) do
+        -- Kiểm tra xem xung quanh bạn có Part nào tên là "Hitbox", "Damage", "Swing", hoặc "Slash" của Killer không
+        local nameLower = part.Name:lower()
+        if nameLower:find("hitbox") or nameLower:find("attack") or nameLower:find("damage") then
+            PerformBlock()
+            task.wait(0.4) -- Thời gian chờ hồi chiêu (cooldown) tránh spam lỗi
+            return
         end
     end
-    return nil
-end
 
--- Vòng lặp quét liên tục theo thời gian thực
-RunService.Heartbeat:Connect(function()
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-    
-    local myHRP = character.HumanoidRootPart
-    local killer = GetKiller()
-    
-    if killer and killer.Character and killer.Character:FindFirstChild("HumanoidRootPart") then
-        local killerHRP = killer.Character.HumanoidRootPart
-        local killerHumanoid = killer.Character:FindFirstChildOfClass("Humanoid")
-        
-        -- Tính khoảng cách giữa bạn và Killer
-        local distance = (myHRP.Position - killerHRP.Position).Magnitude
-        
-        if distance <= MAX_DISTANCE then
-            -- Kiểm tra xem Killer có đang tung đòn đánh (chạy Animation tấn công) hay không
-            if killerHumanoid then
-                local playingAnims = killerHumanoid:GetPlayingAnimationTracks()
-                for _, anim in ipairs(playingAnims) do
-                    -- Kiểm tra tên Animation có chứa các từ khóa tấn công hay không
-                    local animName = anim.Name:lower()
-                    if animName:find("attack") or animName:find("slash") or animName:find("swing") or animName:find("hit") then
-                        -- Nếu Killer đang chém và ở trong tầm, tự động đỡ đòn!
-                        TriggerBlock()
-                        task.wait(0.5) -- Tránh spam phím quá nhanh gây lỗi
-                        break
-                    end
+    -- Cách 2: Quét khoảng cách trực tiếp với Killer (Dự phòng nếu game giấu kín Hitbox)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local killerChar = player.Character
+            local killerHRP = killerChar.HumanoidRootPart
+            
+            -- Tính khoảng cách
+            local distance = (myHRP.Position - killerHRP.Position).Magnitude
+            
+            if distance <= ACTIVATION_DISTANCE then
+                -- Kiểm tra xem Killer có đổi trạng thái (Attributes) sang tấn công không
+                -- Forsaken thường dùng Attributes để quản lý như: "Attacking" = true hoặc "IsSwinging" = true
+                if killerChar:GetAttribute("Attacking") == true or killerChar:GetAttribute("IsAttacking") == true or killerChar:GetAttribute("Swinging") == true then
+                    PerformBlock()
+                    task.wait(0.4)
+                    break
                 end
             end
         end
