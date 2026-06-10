@@ -1,44 +1,22 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
-local ACTIVATION_DISTANCE = 15
+local BLOCK_KEY = Enum.KeyCode.Q -- Nút đỡ đòn trong Forsaken
+local ACTIVATION_DISTANCE = 15   -- Khoảng cách an toàn để kích hoạt
 
--- Các biến lưu trữ dữ liệu bảo mật đã "học" được từ bạn
-local SavedRemote = nil
-local SavedArgs = nil
-local HasLearned = false
+print("--- [Forsaken PC] Auto Block phím Q an toàn đã bật! ---")
 
-print("--- [Hệ thống Auto-Learn Forsaken đã bật] ---")
-print("BẮT BUỘC: Hãy nhấn phím Q thủ công 1 lần trong trận để script học mã khóa!")
+-- Hàm giả lập nhấn phím Q một cách tự nhiên giống người thật bấm
+local function SafeQBlock()
+    VirtualInputManager:SendKeyEvent(true, BLOCK_KEY, false, game) -- Bấm giữ Q
+    task.wait(math.random(5, 8) / 100) -- Giữ nút ngẫu nhiên từ 0.05 đến 0.08 giây để qua mặt anti-cheat
+    VirtualInputManager:SendKeyEvent(false, BLOCK_KEY, false, game) -- Thả Q
+end
 
--- 1. Bộ lọc lắng nghe để tự động học mã khóa khi bạn nhấn Q
-local mt = getrawmetatable(game)
-local oldNamecall = mt.__namecall
-setreadonly(mt, false)
-
-mt.__namecall = newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    local args = {...}
-    
-    -- Nếu bạn bấm nút và game gửi tín hiệu Đỡ/Kỹ năng lên server
-    if method == "FireServer" and self:IsA("RemoteEvent") and not HasLearned then
-        local name = self.Name:lower()
-        if name:find("block") or name:find("parry") or name:find("dash") or name:find("ability") or name:find("combat") then
-            SavedRemote = self
-            SavedArgs = args
-            HasLearned = true
-            warn("🎉 Đã học được mã khóa bảo mật thành công! Hệ thống Auto Block sẵn sàng.")
-        end
-    end
-    return oldNamecall(self, ...)
-end)
-setreadonly(mt, true)
-
--- 2. Vòng lặp tự động đỡ đòn sử dụng mã khóa đã học
-RunService.RenderStepped:Connect(function()
-    if not HasLearned or not SavedRemote then return end
-    
+-- Vòng lặp quét an toàn, không can thiệp vào đường truyền kỹ năng của bạn
+RunService.Heartbeat:Connect(function()
     local myChar = LocalPlayer.Character
     if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
     local myHRP = myChar.HumanoidRootPart
@@ -47,17 +25,37 @@ RunService.RenderStepped:Connect(function()
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local killerChar = player.Character
             local killerHRP = killerChar.HumanoidRootPart
+            local killerHumanoid = killerChar:FindFirstChildOfClass("Humanoid")
             
             local distance = (myHRP.Position - killerHRP.Position).Magnitude
             
+            -- Kiểm tra khoảng cách nguy hiểm
             if distance <= ACTIVATION_DISTANCE then
-                -- Kiểm tra trạng thái tấn công của Killer
-                if killerChar:GetAttribute("Attacking") == true or killerChar:GetAttribute("Swinging") == true then
-                    
-                    -- "Nhái" lại chính xác cuộc gọi kèm theo string và table đã lưu
-                    SavedRemote:FireServer(unpack(SavedArgs))
-                    
-                    task.wait(0.6) -- Cooldown
+                local isAttacking = false
+                
+                -- Check Attributes của Killer
+                if killerChar:GetAttribute("Attacking") == true or 
+                   killerChar:GetAttribute("IsAttacking") == true or 
+                   killerChar:GetAttribute("Swinging") == true then
+                    isAttacking = true
+                end
+                
+                -- Dự phòng: Check hoạt ảnh vung tay của Killer
+                if not isAttacking and killerHumanoid then
+                    local playingAnims = killerHumanoid:GetPlayingAnimationTracks()
+                    for _, anim in ipairs(playingAnims) do
+                        local animName = anim.Name:lower()
+                        if animName:find("attack") or animName:find("slash") or animName:find("swing") then
+                            isAttacking = true
+                            break
+                        end
+                    end
+                end
+                
+                -- Kích hoạt đỡ đòn
+                if isAttacking then
+                    SafeQBlock()
+                    task.wait(0.6) -- Thời gian nghỉ giữa các lần đỡ để bạn tự bấm nút thoải mái
                     break
                 end
             end
