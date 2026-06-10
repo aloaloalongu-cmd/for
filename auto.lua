@@ -1,1 +1,66 @@
-game:GetService("StarterGui"):SetCore("SendNotification",{Title="GUEST 1337",Text="COMBO BLOCK + ESP SAN SANG!",Duration=4}) local P=game:GetService("Players") local LP=P.LocalPlayer local RS=game:GetService("ReplicatedStorage") local cd=false local autoOn=true local espOn=true local dist_check=9 local function getEv() for _,v in ipairs({"BlockEvent","AbilityEvent","UseAbility","Block"}) do if RS:FindFirstChild(v) then return RS[v] end end local r=RS:FindFirstChild("Remotes") or RS:FindFirstChild("Events") if r then for _,v in ipairs({"Ability","Block","Use"}) do if r:FindFirstChild(v) then return r[v] end end end return nil end local Ev=getEv() local function addESP(p) if p==LP then return end local function cE() if not espOn then if p.Character and p.Character:FindFirstChild("GUEST_ESP") then p.Character.GUEST_ESP:Destroy() end return end if p.Character and p.Character:FindFirstChild("HumanoidRootPart") and not p.Character:FindFirstChild("GUEST_ESP") then local h=Instance.new("Highlight") h.Name="GUEST_ESP" h.Parent=p.Character h.FillColor=Color3.fromRGB(255,0,0) h.OutlineColor=Color3.fromRGB(255,255,255) h.FillTransparency=0.5 h.OutlineTransparency=0 end end p.CharacterAdded:Connect(function() task.wait(0.5) cE() end) cE() end for _,p in ipairs(P:GetPlayers()) do addESP(p) end P.PlayerAdded:Connect(addESP) local SG=Instance.new("ScreenGui",LP.PlayerGui) SG.ResetOnSpawn=false local F=Instance.new("Frame",SG) F.Size=UDim2.new(0,180,0,135) F.Position=UDim2.new(0.1,0,0.3,0) F.BackgroundColor3=Color3.fromRGB(30,30,30) F.Active=true F.Draggable=true Instance.new("UICorner",F) local T=Instance.new("TextLabel",F) T.Size=UDim2.new(1,0,0,30) T.Text="GUEST 1337 COMBO" T.TextColor3=Color3.fromRGB(255,255,255) T.BackgroundTransparency=1 T.TextSize=14 local B=Instance.new("TextButton",F) B.Size=UDim2.new(0.9,0,0,25) B.Position=UDim2.new(0.05,0,0.25,0) B.BackgroundColor3=Color3.fromRGB(46,204,113) B.Text="Auto Block: ON" B.TextColor3=Color3.fromRGB(255,255,255) Instance.new("UICorner",B) B.MouseButton1Click:Connect(function() autoOn=not autoOn B.Text=autoOn and "Auto Block: ON" or "Auto Block: OFF" B.BackgroundColor3=autoOn and Color3.fromRGB(46,204,113) or Color3.fromRGB(231,76,60) end) local E=Instance.new("TextButton",F) E.Size=UDim2.new(0.9,0,0,25) E.Position=UDim2.new(0.05,0,0.5,0) E.BackgroundColor3=Color3.fromRGB(46,204,113) E.Text="ESP Xuyen Tuong: ON" E.TextColor3=Color3.fromRGB(255,255,255) Instance.new("UICorner",E) E.MouseButton1Click:Connect(function() espOn=not espOn E.Text=espOn and "ESP Xuyen Tuong: ON" or "ESP Xuyen Tuong: OFF" E.BackgroundColor3=espOn and Color3.fromRGB(46,204,113) or Color3.fromRGB(231,76,60) for _,v in ipairs(P:GetPlayers()) do if v.Character and v.Character:FindFirstChild("GUEST_ESP") then v.Character.GUEST_ESP:Destroy() end end end) local D=Instance.new("TextButton",F) D.Size=UDim2.new(0.9,0,0,25) D.Position=UDim2.new(0.05,0,0.75,0) D.BackgroundColor3=Color3.fromRGB(52,152,219) D.Text="KC Block: "..tostring(dist_check) D.TextColor3=Color3.fromRGB(255,255,255) Instance.new("UICorner",D) D.MouseButton1Click:Connect(function() if dist_check==9 then dist_check=12 elseif dist_check==12 then dist_check=6 else dist_check=9 end D.Text="KC Block: "..tostring(dist_check) end) game:GetService("RunService").Heartbeat:Connect(function() if espOn then for _,v in ipairs(P:GetPlayers()) do if v~=LP and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and not v.Character:FindFirstChild("GUEST_ESP") then local h=Instance.new("Highlight") h.Name="GUEST_ESP" h.Parent=v.Character h.FillColor=Color3.fromRGB(255,0,0) h.OutlineColor=Color3.fromRGB(255,255,255) h.FillTransparency=0.5 h.OutlineTransparency=0 end end end if not autoOn or cd or not LP.Character or not LP.Character:FindFirstChild("HumanoidRootPart") then return end for _,p in ipairs(P:GetPlayers()) do if p~=LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then if (LP.Character.HumanoidRootPart.Position-p.Character.HumanoidRootPart.Position).Magnitude<=dist_check then cd=true if Ev then pcall(function() Ev:FireServer() end) end task.wait(1.5) cd=false break end end end end)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager") -- Dùng để giả lập nhấn phím
+
+local LocalPlayer = Players.LocalPlayer
+local BLOCK_KEY = Enum.KeyCode.Q -- Thay đổi phím F nếu game dùng phím khác để đỡ
+local MAX_DISTANCE = 15 -- Khoảng cách an toàn để kích hoạt block (tính bằng Studs)
+
+-- Hàm giả lập nhấn phím đỡ đòn
+local function TriggerBlock()
+    VirtualInputManager:SendKeyEvent(true, BLOCK_KEY, false, game) -- Nhấn xuống
+    task.wait(0.1) -- Giữ phím một chút
+    VirtualInputManager:SendKeyEvent(false, BLOCK_KEY, false, game) -- Thả ra
+end
+
+-- Hàm tìm Killer trong trận đấu
+local function GetKiller()
+    -- Trong game Forsaken, bạn cần tìm người chơi đang đóng vai Killer.
+    -- Đoạn này kiểm tra dựa trên khoảng cách, bạn có thể tối ưu thêm nếu biết thuộc tính phân biệt Killer của game.
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            -- Mẹo: Thường Killer sẽ có một công cụ (Tool) vũ khí hoặc một trạng thái đặc biệt
+            local character = player.Character
+            local hasWeapon = character:FindFirstChildOfClass("Tool") or character:FindFirstChild("Weapon")
+            
+            if hasWeapon then
+                return player
+            end
+        end
+    end
+    return nil
+end
+
+-- Vòng lặp quét liên tục theo thời gian thực
+RunService.Heartbeat:Connect(function()
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    
+    local myHRP = character.HumanoidRootPart
+    local killer = GetKiller()
+    
+    if killer and killer.Character and killer.Character:FindFirstChild("HumanoidRootPart") then
+        local killerHRP = killer.Character.HumanoidRootPart
+        local killerHumanoid = killer.Character:FindFirstChildOfClass("Humanoid")
+        
+        -- Tính khoảng cách giữa bạn và Killer
+        local distance = (myHRP.Position - killerHRP.Position).Magnitude
+        
+        if distance <= MAX_DISTANCE then
+            -- Kiểm tra xem Killer có đang tung đòn đánh (chạy Animation tấn công) hay không
+            if killerHumanoid then
+                local playingAnims = killerHumanoid:GetPlayingAnimationTracks()
+                for _, anim in ipairs(playingAnims) do
+                    -- Kiểm tra tên Animation có chứa các từ khóa tấn công hay không
+                    local animName = anim.Name:lower()
+                    if animName:find("attack") or animName:find("slash") or animName:find("swing") or animName:find("hit") then
+                        -- Nếu Killer đang chém và ở trong tầm, tự động đỡ đòn!
+                        TriggerBlock()
+                        task.wait(0.5) -- Tránh spam phím quá nhanh gây lỗi
+                        break
+                    end
+                end
+            end
+        end
+    end
+end)
