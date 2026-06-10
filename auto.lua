@@ -1,63 +1,60 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
-local BLOCK_KEY = Enum.KeyCode.Q -- Đã chuyển đổi hoàn toàn sang phím Q
-local ACTIVATION_DISTANCE = 15 -- Khoảng cách quét tính bằng Studs (Có thể chỉnh lên 16-18 nếu mạng ping cao)
+local ACTIVATION_DISTANCE = 16 -- Khoảng cách tự động kích hoạt
 
--- Thông báo hiển thị trong bảng điều khiển F9 để kiểm tra
-print("--- [Forsaken PC Q-Block] Đã kích hoạt thành công! ---")
+print("--- [Forsaken Ultimate Bypass] Khởi chạy bộ quét Remote ---")
 
--- Hàm giả lập nhấn phím Q trên bàn phím PC
-local function PerformQBlock()
-    VirtualInputManager:SendKeyEvent(true, BLOCK_KEY, false, game) -- Nhấn giữ phím Q
-    task.wait(0.05) -- Giữ phím trong 0.05 giây (Frame-perfect cho parry)
-    VirtualInputManager:SendKeyEvent(false, BLOCK_KEY, false, game) -- Thả phím Q
+-- Hàm tìm kiếm và kích hoạt hành động đỡ đòn qua hệ thống mạng của game
+local function ForceParry()
+    -- Cách 1: Quét và kích hoạt trực tiếp các Sự kiện (RemoteEvents) trong ReplicatedStorage
+    -- Game Forsaken bắt buộc phải gửi tín hiệu lên Server khi bạn bấm Q để người khác thấy bạn đang đỡ/lướt
+    for _, child in ipairs(ReplicatedStorage:GetDescendants()) do
+        if child:IsA("RemoteEvent") then
+            local name = child.Name:lower()
+            -- Quét các từ khóa liên quan đến cơ chế phòng thủ/kỹ năng trong game
+            if name:find("block") or name:find("parry") or name:find("dash") or name:find("ability") or name:find("skill") then
+                child:FireServer(true)
+                task.wait(0.1)
+                child:FireServer(false)
+                return
+            end
+        end
+    end
+
+    -- Cách 2: Nếu game giấu Remote trong nhân vật, quét trực tiếp trong Tool/Character của bạn
+    local myChar = LocalPlayer.Character
+    if myChar then
+        for _, child in ipairs(myChar:GetDescendants()) do
+            if child:IsA("RemoteEvent") then
+                child:FireServer()
+            end
+        end
+    end
 end
 
--- Vòng lặp quét liên tục mỗi khung hình để không bỏ sót đòn đánh nào
+-- Vòng lặp quét dựa trên vị trí tuyệt đối (Bỏ qua việc check Attributes của Killer phòng trường hợp game giấu thuộc tính)
 RunService.RenderStepped:Connect(function()
     local myChar = LocalPlayer.Character
     if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
     local myHRP = myChar.HumanoidRootPart
 
-    -- Quét danh sách người chơi để tìm Killer
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local killerChar = player.Character
             local killerHRP = killerChar.HumanoidRootPart
             local killerHumanoid = killerChar:FindFirstChildOfClass("Humanoid")
             
-            -- Tính khoảng cách giữa bạn và Killer
             local distance = (myHRP.Position - killerHRP.Position).Magnitude
             
+            -- Vì không thể dò chính xác tên thuộc tính "Attacking" bị nhà phát triển ẩn đi,
+            -- script này sẽ tự động kích hoạt Đỡ đòn ngay khi Killer bước vào phạm vi nguy hiểm và đang di chuyển lao vào bạn.
             if distance <= ACTIVATION_DISTANCE then
-                local shouldBlock = false
-                
-                -- Điều kiện 1: Quét trạng thái Attributes ẩn của game Forsaken
-                if killerChar:GetAttribute("Attacking") == true or 
-                   killerChar:GetAttribute("IsAttacking") == true or 
-                   killerChar:GetAttribute("Swinging") == true then
-                    shouldBlock = true
-                end
-                
-                -- Điều kiện 2: Dự phòng quét hoạt ảnh (Animation) vung vũ khí của Killer
-                if not shouldBlock and killerHumanoid then
-                    local playingAnims = killerHumanoid:GetPlayingAnimationTracks()
-                    for _, anim in ipairs(playingAnims) do
-                        local animName = anim.Name:lower()
-                        if animName:find("attack") or animName:find("slash") or animName:find("swing") or animName:find("hit") then
-                            shouldBlock = true
-                            break
-                        end
-                    end
-                end
-                
-                -- Thực hiện đỡ đòn nếu thỏa mãn điều kiện
-                if shouldBlock then
-                    PerformQBlock()
-                    task.wait(0.5) -- Thời gian chờ hồi chiêu chống spam lỗi đơ nút
+                if killerHumanoid and killerHumanoid.MoveDirection.Magnitude > 0 then
+                    ForceParry()
+                    task.wait(0.4) -- Khóa thời gian chờ tránh spam gây lỗi game
                     break
                 end
             end
