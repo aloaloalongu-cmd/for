@@ -3,20 +3,19 @@ local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
-local BLOCK_KEY = Enum.KeyCode.Q -- Nút đỡ đòn trong Forsaken
-local ACTIVATION_DISTANCE = 15   -- Khoảng cách an toàn để kích hoạt
+local BLOCK_KEY = Enum.KeyCode.Q
+local ACTIVATION_DISTANCE = 16 
 
-print("--- [Forsaken PC] Auto Block phím Q an toàn đã bật! ---")
+print("--- [Forsaken PC] Auto Block V3 (Modern Scan) đã bật! ---")
 
--- Hàm giả lập nhấn phím Q một cách tự nhiên giống người thật bấm
 local function SafeQBlock()
-    VirtualInputManager:SendKeyEvent(true, BLOCK_KEY, false, game) -- Bấm giữ Q
-    task.wait(math.random(5, 8) / 100) -- Giữ nút ngẫu nhiên từ 0.05 đến 0.08 giây để qua mặt anti-cheat
-    VirtualInputManager:SendKeyEvent(false, BLOCK_KEY, false, game) -- Thả Q
+    print("⚠️ ĐÃ PHÁT HIỆN ĐÒN CHÉM! Đang tự động bấm Q...")
+    VirtualInputManager:SendKeyEvent(true, BLOCK_KEY, false, game)
+    task.wait(0.05) 
+    VirtualInputManager:SendKeyEvent(false, BLOCK_KEY, false, game)
 end
 
--- Vòng lặp quét an toàn, không can thiệp vào đường truyền kỹ năng của bạn
-RunService.Heartbeat:Connect(function()
+RunService.RenderStepped:Connect(function()
     local myChar = LocalPlayer.Character
     if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
     local myHRP = myChar.HumanoidRootPart
@@ -25,37 +24,42 @@ RunService.Heartbeat:Connect(function()
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local killerChar = player.Character
             local killerHRP = killerChar.HumanoidRootPart
-            local killerHumanoid = killerChar:FindFirstChildOfClass("Humanoid")
+            local humanoid = killerChar:FindFirstChildOfClass("Humanoid")
             
             local distance = (myHRP.Position - killerHRP.Position).Magnitude
             
-            -- Kiểm tra khoảng cách nguy hiểm
             if distance <= ACTIVATION_DISTANCE then
                 local isAttacking = false
                 
-                -- Check Attributes của Killer
-                if killerChar:GetAttribute("Attacking") == true or 
-                   killerChar:GetAttribute("IsAttacking") == true or 
-                   killerChar:GetAttribute("Swinging") == true then
-                    isAttacking = true
-                end
-                
-                -- Dự phòng: Check hoạt ảnh vung tay của Killer
-                if not isAttacking and killerHumanoid then
-                    local playingAnims = killerHumanoid:GetPlayingAnimationTracks()
-                    for _, anim in ipairs(playingAnims) do
-                        local animName = anim.Name:lower()
-                        if animName:find("attack") or animName:find("slash") or animName:find("swing") then
-                            isAttacking = true
-                            break
+                -- 1. Quét theo chuẩn Roblox mới (Animator)
+                if humanoid then
+                    local animator = humanoid:FindFirstChildOfClass("Animator")
+                    if animator then
+                        for _, anim in ipairs(animator:GetPlayingAnimationTracks()) do
+                            local animName = anim.Name:lower()
+                            -- Quét rộng hơn các từ khóa liên quan đến kỹ năng
+                            if animName:find("attack") or animName:find("slash") or animName:find("swing") or animName:find("hit") or animName:find("m1") or animName:find("combat") then
+                                isAttacking = true
+                                break
+                            end
                         end
                     end
                 end
                 
-                -- Kích hoạt đỡ đòn
+                -- 2. Quét công cụ (Tool) trên tay Killer xem có đang được kích hoạt không
+                local tool = killerChar:FindFirstChildOfClass("Tool")
+                if tool and tool:GetAttribute("Attacking") then
+                    isAttacking = true
+                end
+
+                -- 3. Quét trạng thái Attributes (Dự phòng)
+                if killerChar:GetAttribute("Attacking") or killerChar:GetAttribute("IsSwinging") then
+                    isAttacking = true
+                end
+                
                 if isAttacking then
                     SafeQBlock()
-                    task.wait(0.6) -- Thời gian nghỉ giữa các lần đỡ để bạn tự bấm nút thoải mái
+                    task.wait(0.6) -- Cooldown
                     break
                 end
             end
